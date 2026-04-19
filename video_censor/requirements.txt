@@ -1,0 +1,11 @@
+ultralytics>=8.3.0
+transformers>=4.40.0
+torch>=2.0.0
+torchvision>=0.15.0
+opencv-python>=4.8.0
+supervision>=0.21.0
+numpy>=1.24.0
+Pillow>=9.0.0
+huggingface-hub>=0.20.0
+# SAM2 (for --select interactive tracking):
+# pip install git+https://github.com/facebookresearch/sam2.git

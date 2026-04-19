@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "video-censor"
+version = "0.1.0"
+description = "Automated video censoring for dashcam footage: persons, license plates, logos, and user-selected objects"
+requires-python = ">=3.10"
+dependencies = [
+    "ultralytics>=8.3.0",
+    "transformers>=4.40.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "opencv-python>=4.8.0",
+    "supervision>=0.21.0",
+    "numpy>=1.24.0",
+    "Pillow>=9.0.0",
+    "huggingface-hub>=0.20.0",
+]
+
+[project.scripts]
+video-censor = "video_censor.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-mock>=3.0.0",
+    "pytest-cov>=4.0.0",
+]
+# SAM2 for interactive selection:
+# pip install git+https://github.com/facebookresearch/sam2.git
+sam2 = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["video_censor*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=video_censor --cov-report=term-missing -v"
