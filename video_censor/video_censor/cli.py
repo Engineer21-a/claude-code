@@ -1,11 +1,49 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .config import AppConfig, CensorConfig, DetectorConfig, IOConfig, TrackerConfig
 from .models import BoundingBox, CensorMethod, InteractiveSelection
 from .pipeline import CensorPipeline
+
+# Supported input extensions (OpenCV can open others, but these are common video formats)
+_VIDEO_EXTENSIONS = {
+    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm",
+    ".m4v", ".ts", ".mts", ".m2ts", ".3gp",
+}
+
+
+def _positive_int(value: str) -> int:
+    """argparse type that requires a strictly positive integer."""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer.")
+    if n <= 0:
+        raise argparse.ArgumentTypeError(f"Must be a positive integer, got {n}.")
+    return n
+
+
+def _positive_odd_int(value: str) -> int:
+    """argparse type for kernel sizes: positive odd integer."""
+    n = _positive_int(value)
+    # Silently enforce odd; matches the bitwise-OR enforcement in effects.py
+    return n | 1
+
+
+def _confidence(value: str) -> float:
+    """argparse type for confidence threshold in [0.0, 1.0]."""
+    try:
+        f = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a float.")
+    if not (0.0 <= f <= 1.0):
+        raise argparse.ArgumentTypeError(
+            f"Confidence must be between 0.0 and 1.0, got {f}."
+        )
+    return f
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,7 +84,7 @@ examples:
     det.add_argument("--no-logos", action="store_true", help="Disable logo/trademark detection.")
     det.add_argument(
         "--confidence",
-        type=float,
+        type=_confidence,
         default=0.4,
         metavar="THRESHOLD",
         help="Detection confidence threshold 0.0–1.0 (default: 0.4).",
@@ -62,17 +100,17 @@ examples:
     )
     censor.add_argument(
         "--blur-kernel",
-        type=int,
+        type=_positive_odd_int,
         default=51,
         metavar="SIZE",
-        help="Gaussian blur kernel size, must be odd (default: 51).",
+        help="Gaussian blur kernel size, must be a positive odd integer (default: 51).",
     )
     censor.add_argument(
         "--pixel-size",
-        type=int,
+        type=_positive_int,
         default=15,
         metavar="SIZE",
-        help="Pixelation block size (default: 15).",
+        help="Pixelation block size, must be a positive integer (default: 15).",
     )
     censor.add_argument(
         "--padding",
@@ -107,14 +145,49 @@ examples:
     perf = parser.add_argument_group("performance")
     perf.add_argument(
         "--batch-size",
-        type=int,
+        type=_positive_int,
         default=8,
         metavar="N",
-        help="Frames decoded per batch (default: 8).",
+        help="Frames decoded per batch, must be >= 1 (default: 8).",
     )
     perf.add_argument("--quiet", action="store_true", help="Suppress progress output.")
 
     return parser
+
+
+def _validate_paths(input_path: str, output_path: str) -> None:
+    """Raise argparse.ArgumentTypeError for invalid or unsafe paths."""
+    # --- Input ---
+    if not os.path.exists(input_path):
+        raise argparse.ArgumentTypeError(
+            f"Input file not found: {input_path!r}"
+        )
+    if not os.path.isfile(input_path):
+        raise argparse.ArgumentTypeError(
+            f"Input path is not a regular file: {input_path!r}"
+        )
+    ext = os.path.splitext(input_path)[1].lower()
+    if ext not in _VIDEO_EXTENSIONS:
+        raise argparse.ArgumentTypeError(
+            f"Input file extension {ext!r} is not a recognised video format. "
+            f"Supported: {sorted(_VIDEO_EXTENSIONS)}"
+        )
+
+    # --- Output ---
+    output_dir = os.path.dirname(os.path.abspath(output_path)) or "."
+    if not os.path.isdir(output_dir):
+        raise argparse.ArgumentTypeError(
+            f"Output directory does not exist: {output_dir!r}"
+        )
+    if not os.access(output_dir, os.W_OK):
+        raise argparse.ArgumentTypeError(
+            f"Output directory is not writable: {output_dir!r}"
+        )
+    # Prevent overwriting the input file
+    if os.path.abspath(input_path) == os.path.abspath(output_path):
+        raise argparse.ArgumentTypeError(
+            "Output path must differ from input path."
+        )
 
 
 def parse_selection(raw: str) -> InteractiveSelection:
@@ -124,7 +197,18 @@ def parse_selection(raw: str) -> InteractiveSelection:
         if len(parts) != 5:
             raise ValueError
         frame_index, x1, y1, x2, y2 = parts
+        if frame_index < 0:
+            raise argparse.ArgumentTypeError(
+                f"frame_index must be >= 0, got {frame_index}."
+            )
+        if x1 >= x2 or y1 >= y2:
+            raise argparse.ArgumentTypeError(
+                f"Bounding box is degenerate: x1={x1} x2={x2} y1={y1} y2={y2}. "
+                "Require x1 < x2 and y1 < y2."
+            )
         return InteractiveSelection(frame_index=frame_index, bbox=BoundingBox(x1, y1, x2, y2))
+    except argparse.ArgumentTypeError:
+        raise
     except ValueError:
         raise argparse.ArgumentTypeError(
             f"Invalid --select value: {raw!r}. Expected format: frame_index,x1,y1,x2,y2"
@@ -166,9 +250,10 @@ def build_config_from_args(args: argparse.Namespace) -> AppConfig:
 def _progress_bar(current: int, total: int) -> None:
     if total <= 0:
         return
-    pct = current / total * 100
+    # Clamp to 100 % — codec metadata can report an incorrect frame count
+    pct = min(current / total * 100, 100.0)
     bar_len = 40
-    filled = int(bar_len * current / total)
+    filled = min(int(bar_len * current / total), bar_len)
     bar = "#" * filled + "-" * (bar_len - filled)
     print(f"\r[{bar}] {pct:.1f}% ({current}/{total} frames)", end="", flush=True)
 
@@ -177,12 +262,18 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns exit code (0 = success, non-zero = error)."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    try:
+        _validate_paths(args.input, args.output)
+    except argparse.ArgumentTypeError as exc:
+        parser.error(str(exc))
+
     cfg = build_config_from_args(args)
 
     pipeline = CensorPipeline(cfg)
     try:
         pipeline.build()
-    except Exception as exc:
+    except (MemoryError, RuntimeError, OSError) as exc:
         print(f"Error loading models: {exc}", file=sys.stderr)
         return 1
 
@@ -193,7 +284,13 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(f"\nError: {exc}", file=sys.stderr)
         return 1
-    except Exception as exc:
+    except ValueError as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"\nI/O error: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001
         print(f"\nUnexpected error: {exc}", file=sys.stderr)
         return 1
 

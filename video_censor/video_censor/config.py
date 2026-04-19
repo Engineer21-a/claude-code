@@ -10,6 +10,7 @@ class DetectorConfig:
     person_model: str = "yolo11n.pt"
     license_plate_model: str = "keremberke/yolov8-license-plate-detection"
     logo_model: str = "openfoodfacts/universal-logo-detector"
+    sam2_model: str = "facebook/sam2-hiera-small"
     confidence_threshold: float = 0.4
     device: str = "cpu"
 

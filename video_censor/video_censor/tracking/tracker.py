@@ -72,14 +72,20 @@ def _sv_to_detections(
     originals: list[Detection],
     frame_index: int,
 ) -> list[Detection]:
-    """Map supervision tracker output back to our Detection dataclass."""
+    """Map supervision tracker output back to our Detection dataclass.
+
+    ByteTrack can return more detections than the input list when it
+    resurrects lost tracks; those extra entries have no known class,
+    so we only emit detections that correspond to an original.
+    """
     result: list[Detection] = []
-    for i in range(len(sv_dets)):
+    n = min(len(sv_dets), len(originals))
+    for i in range(n):
         bbox_arr = sv_dets.xyxy[i]
         track_id = (
             int(sv_dets.tracker_id[i]) if sv_dets.tracker_id is not None else None
         )
-        orig = originals[i] if i < len(originals) else originals[-1]
+        orig = originals[i]
         conf = (
             float(sv_dets.confidence[i])
             if sv_dets.confidence is not None

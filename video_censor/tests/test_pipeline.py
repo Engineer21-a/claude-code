@@ -159,9 +159,9 @@ def minimal_cfg(tmp_path):
     )
 
 
-def _make_mock_reader(mocker, total_frames=4, batch_size=2):
+def _make_mock_reader(mocker, total_frames=4, batch_size=2, width=640, height=480):
     """Build a mock VideoReader that returns `total_frames` dummy frames."""
-    dummy = np.zeros((480, 640, 3), dtype=np.uint8)
+    dummy = np.zeros((height, width, 3), dtype=np.uint8)
     frames_per_batch = [dummy] * batch_size
     n_full_batches = total_frames // batch_size
     batches = [frames_per_batch] * n_full_batches + [[]]
@@ -171,8 +171,8 @@ def _make_mock_reader(mocker, total_frames=4, batch_size=2):
     mock_reader.__exit__ = mocker.MagicMock(return_value=False)
     mock_reader.metadata.total_frames = total_frames
     mock_reader.metadata.fps = 30.0
-    mock_reader.metadata.width = 640
-    mock_reader.metadata.height = 480
+    mock_reader.metadata.width = width
+    mock_reader.metadata.height = height
     mock_reader.metadata.fourcc = 0
     mock_reader.read_batch.side_effect = batches
     return mock_reader
@@ -185,12 +185,22 @@ def _make_mock_writer(mocker):
     return mock_writer
 
 
+def _patch_io(mocker, mock_reader, mock_writer, tmp_path):
+    """Patch VideoReader, VideoWriter, and the atomic rename so no real files are needed."""
+    mocker.patch("video_censor.pipeline.VideoReader", return_value=mock_reader)
+    mocker.patch("video_censor.pipeline.VideoWriter", return_value=mock_writer)
+    tmp = str(tmp_path / "tmp_output.mp4")
+    mocker.patch("video_censor.pipeline.tempfile.mkstemp", return_value=(0, tmp))
+    mocker.patch("video_censor.pipeline.os.close")
+    mocker.patch("video_censor.pipeline.os.replace")
+    mocker.patch("video_censor.pipeline.os.unlink")
+
+
 class TestCensorPipelineRun:
-    def test_processes_all_frames(self, mocker, minimal_cfg):
+    def test_processes_all_frames(self, mocker, minimal_cfg, tmp_path):
         mock_reader = _make_mock_reader(mocker, total_frames=4, batch_size=2)
         mock_writer = _make_mock_writer(mocker)
-        mocker.patch("video_censor.pipeline.VideoReader", return_value=mock_reader)
-        mocker.patch("video_censor.pipeline.VideoWriter", return_value=mock_writer)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
 
         pipeline = CensorPipeline(minimal_cfg)
         pipeline.build()
@@ -198,11 +208,10 @@ class TestCensorPipelineRun:
 
         assert stats.processed_frames == 4
 
-    def test_writes_correct_number_of_frames(self, mocker, minimal_cfg):
+    def test_writes_correct_number_of_frames(self, mocker, minimal_cfg, tmp_path):
         mock_reader = _make_mock_reader(mocker, total_frames=4, batch_size=2)
         mock_writer = _make_mock_writer(mocker)
-        mocker.patch("video_censor.pipeline.VideoReader", return_value=mock_reader)
-        mocker.patch("video_censor.pipeline.VideoWriter", return_value=mock_writer)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
 
         pipeline = CensorPipeline(minimal_cfg)
         pipeline.build()
@@ -210,11 +219,10 @@ class TestCensorPipelineRun:
 
         assert mock_writer.write_frame.call_count == 4
 
-    def test_progress_callback_called_for_each_frame(self, mocker, minimal_cfg):
+    def test_progress_callback_called_for_each_frame(self, mocker, minimal_cfg, tmp_path):
         mock_reader = _make_mock_reader(mocker, total_frames=4, batch_size=2)
         mock_writer = _make_mock_writer(mocker)
-        mocker.patch("video_censor.pipeline.VideoReader", return_value=mock_reader)
-        mocker.patch("video_censor.pipeline.VideoWriter", return_value=mock_writer)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
 
         calls = []
         pipeline = CensorPipeline(minimal_cfg)
@@ -224,11 +232,10 @@ class TestCensorPipelineRun:
         assert len(calls) == 4
         assert calls[-1][0] == 4
 
-    def test_stats_elapsed_and_fps_populated(self, mocker, minimal_cfg):
+    def test_stats_elapsed_and_fps_populated(self, mocker, minimal_cfg, tmp_path):
         mock_reader = _make_mock_reader(mocker, total_frames=2, batch_size=2)
         mock_writer = _make_mock_writer(mocker)
-        mocker.patch("video_censor.pipeline.VideoReader", return_value=mock_reader)
-        mocker.patch("video_censor.pipeline.VideoWriter", return_value=mock_writer)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
 
         pipeline = CensorPipeline(minimal_cfg)
         pipeline.build()
@@ -237,19 +244,46 @@ class TestCensorPipelineRun:
         assert stats.elapsed_seconds >= 0
         assert stats.fps >= 0
 
-    def test_empty_video_returns_zero_processed(self, mocker, minimal_cfg):
-        mock_reader = mocker.MagicMock()
-        mock_reader.__enter__ = lambda s: s
-        mock_reader.__exit__ = mocker.MagicMock(return_value=False)
-        mock_reader.metadata.total_frames = 0
-        mock_reader.metadata.fps = 30.0
-        mock_reader.metadata.width = 640
-        mock_reader.metadata.height = 480
-        mock_reader.metadata.fourcc = 0
-        mock_reader.read_batch.return_value = []
+    def test_atomic_rename_called_on_success(self, mocker, minimal_cfg, tmp_path):
+        mock_reader = _make_mock_reader(mocker, total_frames=2, batch_size=2)
         mock_writer = _make_mock_writer(mocker)
-        mocker.patch("video_censor.pipeline.VideoReader", return_value=mock_reader)
-        mocker.patch("video_censor.pipeline.VideoWriter", return_value=mock_writer)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
+        replace_spy = mocker.patch("video_censor.pipeline.os.replace")
+
+        pipeline = CensorPipeline(minimal_cfg)
+        pipeline.build()
+        pipeline.run()
+
+        replace_spy.assert_called_once()
+
+    def test_temp_file_removed_on_failure(self, mocker, minimal_cfg, tmp_path):
+        mock_reader = _make_mock_reader(mocker, total_frames=2, batch_size=2)
+        mock_writer = _make_mock_writer(mocker)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
+        unlink_spy = mocker.patch("video_censor.pipeline.os.unlink")
+        mocker.patch("video_censor.pipeline.VideoReader", side_effect=FileNotFoundError("gone"))
+
+        pipeline = CensorPipeline(minimal_cfg)
+        pipeline.build()
+        with pytest.raises(FileNotFoundError):
+            pipeline.run()
+        unlink_spy.assert_called_once()
+
+    def test_invalid_dimensions_raises_value_error(self, mocker, minimal_cfg, tmp_path):
+        mock_reader = _make_mock_reader(mocker, total_frames=4, batch_size=2, width=0, height=0)
+        mock_writer = _make_mock_writer(mocker)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
+
+        pipeline = CensorPipeline(minimal_cfg)
+        pipeline.build()
+        with pytest.raises(ValueError, match="Invalid video dimensions"):
+            pipeline.run()
+
+    def test_empty_video_returns_zero_processed(self, mocker, minimal_cfg, tmp_path):
+        mock_reader = _make_mock_reader(mocker, total_frames=0, batch_size=2)
+        mock_reader.read_batch.side_effect = [[]]
+        mock_writer = _make_mock_writer(mocker)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
 
         pipeline = CensorPipeline(minimal_cfg)
         pipeline.build()
@@ -258,9 +292,41 @@ class TestCensorPipelineRun:
         assert stats.processed_frames == 0
         assert mock_writer.write_frame.call_count == 0
 
-    def test_censored_regions_counted(self, mocker, minimal_cfg):
-        from video_censor.models import BoundingBox, Detection, DetectionClass, FrameDetections
+    def test_out_of_bounds_bbox_clamped_before_censoring(self, mocker, minimal_cfg, tmp_path):
+        """Bboxes with coords outside frame dims must be clamped, not wrapped."""
+        dummy = np.ones((480, 640, 3), dtype=np.uint8) * 128
+        mock_reader = mocker.MagicMock()
+        mock_reader.__enter__ = lambda s: s
+        mock_reader.__exit__ = mocker.MagicMock(return_value=False)
+        mock_reader.metadata.total_frames = 1
+        mock_reader.metadata.fps = 30.0
+        mock_reader.metadata.width = 640
+        mock_reader.metadata.height = 480
+        mock_reader.metadata.fourcc = 0
+        mock_reader.read_batch.side_effect = [[dummy], []]
+        mock_writer = _make_mock_writer(mocker)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
 
+        # Detection with clearly out-of-bounds coordinates
+        mock_detector = mocker.MagicMock()
+        mock_detector.detection_class = DetectionClass.PERSON
+        mock_detector.detect_batch.return_value = [
+            FrameDetections(
+                frame_index=0,
+                detections=[
+                    Detection(BoundingBox(-100, -100, 9999, 9999), DetectionClass.PERSON, 0.9),
+                ],
+            )
+        ]
+        mock_detector.warmup.return_value = None
+
+        pipeline = CensorPipeline(minimal_cfg)
+        pipeline._detectors = [mock_detector]
+        # Should not raise due to numpy index wrapping
+        stats = pipeline.run()
+        assert stats.total_censored_regions == 1
+
+    def test_censored_regions_counted(self, mocker, minimal_cfg, tmp_path):
         dummy = np.zeros((480, 640, 3), dtype=np.uint8)
         mock_reader = mocker.MagicMock()
         mock_reader.__enter__ = lambda s: s
@@ -272,10 +338,8 @@ class TestCensorPipelineRun:
         mock_reader.metadata.fourcc = 0
         mock_reader.read_batch.side_effect = [[dummy], []]
         mock_writer = _make_mock_writer(mocker)
-        mocker.patch("video_censor.pipeline.VideoReader", return_value=mock_reader)
-        mocker.patch("video_censor.pipeline.VideoWriter", return_value=mock_writer)
+        _patch_io(mocker, mock_reader, mock_writer, tmp_path)
 
-        # Inject a mock detector that returns 2 detections per frame
         mock_detector = mocker.MagicMock()
         mock_detector.detection_class = DetectionClass.PERSON
         mock_detector.detect_batch.return_value = [

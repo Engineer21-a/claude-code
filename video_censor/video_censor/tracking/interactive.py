@@ -24,7 +24,7 @@ class InteractiveTracker:
         from sam2.sam2_image_predictor import SAM2ImagePredictor
 
         self._predictor = SAM2ImagePredictor.from_pretrained(
-            "facebook/sam2-hiera-small",
+            self._det_cfg.sam2_model,
             device=self._det_cfg.device,
         )
 
@@ -40,7 +40,8 @@ class InteractiveTracker:
         if self._predictor is None:
             self._load_sam2()
 
-        assert self._predictor is not None
+        if self._predictor is None:
+            raise RuntimeError("SAM2 predictor failed to load.")
         rgb = frame[:, :, ::-1].copy()
         self._predictor.set_image(rgb)
         box = np.array(

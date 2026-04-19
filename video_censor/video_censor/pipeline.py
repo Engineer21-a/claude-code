@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import tempfile
 import time
 from typing import Callable
 
@@ -30,8 +32,9 @@ class CensorPipeline:
       3. Merge per-detector results into one FrameDetections per frame.
       4. Inject interactive-selection seed detections at the right frame.
       5. Update the tracker frame-by-frame (ByteTrack is sequential).
-      6. Apply censoring effects.
-      7. Write the censored frame to the output video.
+      6. Clamp all bboxes to frame dimensions (guards against negative numpy indices).
+      7. Apply censoring effects.
+      8. Write to a temp file; rename atomically on success.
     """
 
     def __init__(self, cfg: AppConfig) -> None:
@@ -71,11 +74,49 @@ class CensorPipeline:
         stats = ProcessingStats()
         start_time = time.monotonic()
 
+        output_path = self._cfg.io.output_path
+        output_dir = os.path.dirname(os.path.abspath(output_path)) or "."
+
+        # Write to a temp file in the same directory so os.rename is atomic
+        # (same filesystem). On success we rename; on failure the partial file is
+        # discarded and the original output (if any) is not overwritten.
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=output_dir, suffix=".tmp.mp4")
+        os.close(tmp_fd)
+
+        try:
+            self._process(tmp_path, stats, on_progress)
+        except BaseException:
+            # Remove the incomplete temp file on any error (including Ctrl-C)
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        os.replace(tmp_path, output_path)
+        return stats
+
+    def _process(
+        self,
+        output_path: str,
+        stats: ProcessingStats,
+        on_progress: ProgressCallback | None,
+    ) -> None:
+        start_time = time.monotonic()
+
         with VideoReader(self._cfg.io.input_path) as reader:
             meta = reader.metadata
-            stats.total_frames = meta.total_frames
 
-            with VideoWriter(self._cfg.io.output_path, meta) as writer:
+            if meta.width <= 0 or meta.height <= 0:
+                raise ValueError(
+                    f"Invalid video dimensions: {meta.width}×{meta.height}. "
+                    "The file may be corrupt or unsupported."
+                )
+
+            stats.total_frames = meta.total_frames
+            frame_w, frame_h = meta.width, meta.height
+
+            with VideoWriter(output_path, meta) as writer:
                 frame_index = 0
                 batch_size = self._cfg.io.batch_size
 
@@ -104,7 +145,15 @@ class CensorPipeline:
                         tracked_batch.append(self._tracker.update(fd))
 
                     for frame, tracked_fd in zip(batch, tracked_batch):
-                        bboxes = [d.bbox for d in tracked_fd.detections]
+                        # Clamp all bboxes to frame dimensions before censoring.
+                        # Models can produce out-of-bounds coords; negative numpy
+                        # indices wrap around and would censor the wrong region,
+                        # leaking private content.
+                        bboxes = [
+                            d.bbox.clamp(frame_w, frame_h)
+                            for d in tracked_fd.detections
+                            if d.bbox.clamp(frame_w, frame_h).is_valid()
+                        ]
                         censored = apply_censor_many(frame, bboxes, self._cfg.censor)
                         writer.write_frame(censored)
                         stats.processed_frames += 1
@@ -117,7 +166,6 @@ class CensorPipeline:
         elapsed = time.monotonic() - start_time
         stats.elapsed_seconds = elapsed
         stats.fps = stats.processed_frames / elapsed if elapsed > 0 else 0.0
-        return stats
 
 
 def _merge_batch_detections(

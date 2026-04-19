@@ -61,6 +61,8 @@ class VideoReader:
 
     def read_batch(self, batch_size: int) -> list[np.ndarray]:
         """Read up to batch_size frames. Returns a shorter list (possibly empty) at EOF."""
+        if batch_size <= 0:
+            raise ValueError(f"batch_size must be >= 1, got {batch_size}.")
         batch: list[np.ndarray] = []
         for _ in range(batch_size):
             frame = self.read_frame()

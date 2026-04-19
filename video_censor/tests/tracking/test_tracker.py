@@ -92,6 +92,25 @@ class TestSvToDetections:
         result = _sv_to_detections(sv_dets, originals, frame_index=0)
         assert result[0].track_id is None
 
+    def test_extra_tracker_detections_trimmed_to_originals(self, mocker):
+        """ByteTrack can return more detections than inputs (resurrected tracks).
+        Extra entries must be dropped to avoid assigning the wrong detection class."""
+        import supervision as sv
+
+        sv_dets = mocker.MagicMock(spec=sv.Detections)
+        sv_dets.__len__ = mocker.MagicMock(return_value=3)
+        sv_dets.xyxy = np.array([
+            [0.0, 0.0, 10.0, 10.0],
+            [20.0, 20.0, 30.0, 30.0],
+            [40.0, 40.0, 50.0, 50.0],  # extra resurrected track
+        ])
+        sv_dets.tracker_id = np.array([1, 2, 99])
+        sv_dets.confidence = np.array([0.9, 0.8, 0.7])
+
+        originals = [_make_detection(), _make_detection(x1=20, y1=20, x2=30, y2=30)]
+        result = _sv_to_detections(sv_dets, originals, frame_index=0)
+        assert len(result) == 2  # extra entry is dropped
+
 
 class TestMultiClassTracker:
     @pytest.fixture

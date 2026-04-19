@@ -89,6 +89,24 @@ class TestVideoReader:
         reader.open()
         assert reader.read_batch(8) == []
 
+    def test_read_batch_zero_raises(self, mocker):
+        mock_cap = mocker.MagicMock()
+        mock_cap.isOpened.return_value = True
+        mocker.patch("cv2.VideoCapture", return_value=mock_cap)
+        reader = VideoReader("/fake/path.mp4")
+        reader.open()
+        with pytest.raises(ValueError, match="batch_size must be >= 1"):
+            reader.read_batch(0)
+
+    def test_read_batch_negative_raises(self, mocker):
+        mock_cap = mocker.MagicMock()
+        mock_cap.isOpened.return_value = True
+        mocker.patch("cv2.VideoCapture", return_value=mock_cap)
+        reader = VideoReader("/fake/path.mp4")
+        reader.open()
+        with pytest.raises(ValueError, match="batch_size must be >= 1"):
+            reader.read_batch(-5)
+
     def test_assert_open_raises_when_not_opened(self):
         reader = VideoReader("/fake/path.mp4")
         with pytest.raises(RuntimeError, match="not open"):

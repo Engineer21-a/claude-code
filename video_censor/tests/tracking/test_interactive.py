@@ -75,6 +75,14 @@ class TestGetMaskForSelection:
         unique_values = set(mask.flatten().tolist())
         assert unique_values.issubset({0, 255})
 
+    def test_raises_if_predictor_still_none_after_load(self, mocker, tracker):
+        """_load_sam2 failure leaves _predictor as None → RuntimeError, not AssertionError."""
+        mocker.patch.object(tracker, "_load_sam2")  # _load_sam2 does nothing (no predictor set)
+        frame = np.zeros((10, 10, 3), dtype=np.uint8)
+        sel = InteractiveSelection(frame_index=0, bbox=BoundingBox(0, 0, 10, 10))
+        with pytest.raises(RuntimeError, match="SAM2 predictor failed to load"):
+            tracker.get_mask_for_selection(frame, sel)
+
     def test_loads_sam2_lazily(self, mocker, tracker):
         load_spy = mocker.patch.object(tracker, "_load_sam2")
         dummy_mask = np.ones((10, 10), dtype=bool)
