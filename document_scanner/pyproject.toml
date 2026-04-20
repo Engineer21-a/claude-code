@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "document-scanner"
+version = "0.1.0"
+description = "Powerful document scanner — Microsoft Lens replacement"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.6.0",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+ml = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "docuwarp>=0.1.0",
+    "realesrgan>=0.3.0",
+    "basicsr>=1.4.2",
+]
+binarize = ["doxapy>=0.5.4"]
+dev = ["pytest>=7.4.0"]
+
+[project.scripts]
+document-scanner = "document_scanner.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["document_scanner*"]
+
+[tool.pytest.ini_options]
+testpaths = ["document_scanner/tests"]

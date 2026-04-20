@@ -1,0 +1,18 @@
+# ── Core (required) ──────────────────────────────────────────────────────────
+PySide6>=6.6.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# ── SOTA ML (optional — install for DocTr dewarping + Real-ESRGAN sharpening) ─
+# torch>=2.0.0
+# torchvision>=0.15.0
+# docuwarp>=0.1.0
+# realesrgan>=0.3.0
+# basicsr>=1.4.2
+
+# ── Advanced binarization (optional — pure-numpy fallback included) ──────────
+# doxapy>=0.5.4
+
+# ── Dev ──────────────────────────────────────────────────────────────────────
+pytest>=7.4.0
