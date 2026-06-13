@@ -72,6 +72,20 @@ def _build_detectors(settings: Settings) -> List[DetectorFn]:
             FuzzyDetector(settings.user_words, threshold=settings.fuzzy_threshold).detect
         )
 
+    # Layer 4 — GLiNER2-PII semantic detection (heavy; lazy model load).
+    if settings.enable_gliner:
+        from app.detectors.gliner_detector import GlinerDetector
+        from app.config.paths import bundled_models_dir
+
+        bundled = bundled_models_dir() / "gliner2-pii-v1"
+        detectors.append(
+            GlinerDetector(
+                labels=settings.gliner_labels,
+                threshold=settings.gliner_threshold,
+                model_path=str(bundled) if bundled.exists() else None,
+            ).detect
+        )
+
     return detectors
 
 
