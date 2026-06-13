@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-redactor"
+version = "0.1.0"
+description = "Local-only, privacy-focused redaction of PDFs and scans (DE/EN), CPU-only."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "AGPL-3.0-only" }  # because PyMuPDF is a dependency; see README Licensing.
+authors = [{ name = "LocalRedactor" }]
+
+# Runtime deps are pinned in requirements.txt to keep the ML wheel set
+# reproducible. Keep this list in sync if you publish to an index.
+dependencies = [
+    "PySide6",
+    "PyMuPDF",
+    "img2pdf",
+    "Pillow",
+    "rapidfuzz",
+    "regex",
+    "pydantic>=2",
+    "platformdirs",
+]
+
+[project.optional-dependencies]
+ocr = ["rapidocr-onnxruntime", "onnxruntime", "pytesseract"]
+gliner = ["gliner2"]
+llm = ["llama-cpp-python"]
+dev = ["pytest"]
+
+[project.scripts]
+local-redactor = "app.main:main"
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

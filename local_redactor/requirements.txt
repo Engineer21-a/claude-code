@@ -1,0 +1,32 @@
+# LocalRedactor — pinned dependencies
+#
+# Versions resolved on a Linux dev box with Python 3.11. On Windows the same
+# pins apply; ML wheels are most reliable on CPython 3.11/3.12.
+#
+# Core (required for the redaction + verification pipeline):
+PySide6==6.9.1
+PyMuPDF==1.27.2.3
+img2pdf==0.6.3
+Pillow==12.2.0
+rapidfuzz==3.14.5
+regex==2024.11.6
+pydantic==2.13.4
+platformdirs==4.10.0
+
+# OCR engines (at least one required for scanned input):
+#   RapidOCR is the default. Newer releases consolidate under the `rapidocr`
+#   package; confirm the current name at install time.
+rapidocr-onnxruntime==1.4.4
+onnxruntime==1.22.0
+pytesseract==0.3.13          # also needs the Tesseract 5 binary + `deu` tessdata
+
+# Semantic PII detection (Phase 3):
+gliner2==0.1.4               # uses fastino/gliner2-pii-v1, Apache 2.0
+
+# Tests / dev:
+pytest==9.1.0
+
+# --- Optional (not installed by default) ---
+# presidio-analyzer            # recognizer-registry abstraction, Phase 2+ optional
+# presidio-anonymizer
+# llama-cpp-python             # Phase 5 local-LLM suggestions only
