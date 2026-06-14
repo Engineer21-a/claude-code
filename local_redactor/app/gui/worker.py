@@ -27,6 +27,9 @@ def _run_one(args):
         "passed": result.audit.verification_passed,
         "reasons": result.audit.verification_reasons,
         "boxes": result.audit.boxes_total,
+        "status": result.audit.status,
+        "error": result.audit.error,
+        "warnings": result.audit.warnings,
     }
 
 

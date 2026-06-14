@@ -154,18 +154,27 @@ class MainWindow(QMainWindow):
 
     def _on_file_done(self, summary: dict) -> None:
         name = Path(summary["source"]).name
+        warn = f" ({len(summary.get('warnings') or [])} warning(s))" if summary.get("warnings") else ""
         if summary["success"]:
-            self.statusBar().showMessage(f"{name}: redacted ({summary['boxes']} boxes), verified.")
+            self.statusBar().showMessage(
+                f"{name}: redacted ({summary['boxes']} boxes), verified{warn}."
+            )
         else:
-            reasons = "; ".join(summary.get("reasons") or ["verification failed"])
-            self.statusBar().showMessage(f"{name}: FLAGGED for manual review — {reasons}")
+            status = summary.get("status", "flagged")
+            reason = summary.get("error") or "; ".join(
+                summary.get("reasons") or ["verification failed"]
+            )
+            self.statusBar().showMessage(f"{name}: {status.upper()} — {reason}")
 
     def _on_finished(self, results: List[dict]) -> None:
         self.run_btn.setEnabled(True)
         self.progress.setVisible(False)
         ok = sum(1 for r in results if r["success"])
         failed = len(results) - ok
+        warnings = sum(len(r.get("warnings") or []) for r in results)
         msg = f"Done. {ok} redacted, {failed} flagged for manual review."
+        if warnings:
+            msg += f" {warnings} warning(s) — see the audit reports."
         QMessageBox.information(self, "Finished", msg)
         self.statusBar().showMessage(msg)
 

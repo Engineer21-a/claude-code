@@ -25,6 +25,10 @@ class AuditReport:
     verification_passed: bool = False
     verification_reasons: List[str] = field(default_factory=list)
     mode: str = ""
+    #: One of: ok | flagged | encrypted | corrupt | error.
+    status: str = "ok"
+    error: Optional[str] = None
+    warnings: List[str] = field(default_factory=list)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_json(self) -> str:

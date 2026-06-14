@@ -135,6 +135,27 @@ about the combined work.
 - **Phase 2** — review preview, German regex, fuzzy matching, batch worker, audit,
   profiles. ✅ (detection + worker + review widget; wiring continues)
 - **Phase 3** — GLiNER2-PII semantic layer with chunking + dedup. ✅
-- **Phase 4** — hardening: encrypted/corrupt/mixed PDFs, secure temp handling,
-  PyInstaller build. ⏳
+- **Phase 4** — hardening: encrypted/corrupt/mixed PDFs handled per file without
+  aborting the batch, OCR-confidence warnings with auto re-run at higher DPI,
+  secure temp wiping, status-only logging, PyInstaller build. ✅
 - **Phase 5** — optional local LLM suggestions. ✅ (detector scaffold; opt-in)
+
+## Packaging a standalone .exe
+
+```bat
+build.bat
+```
+
+Builds `dist\LocalRedactor\LocalRedactor.exe` via PyInstaller
+(`packaging\LocalRedactor.spec`). A runtime hook pins the app offline before any
+import, and `models\` is bundled for offline GLiNER2/OCR. Place the model assets
+under `models\` before building.
+
+## Robustness
+
+Bad inputs never abort a batch: encrypted PDFs (try empty/supplied password),
+corrupt files, and unreadable paths are each flagged with a status
+(`encrypted` / `corrupt` / `error`) and the run continues. Scanned pages that
+OCR poorly raise a confidence warning and are automatically re-OCR'd at a higher
+DPI. All of this is recorded in the per-file audit report — counts and status
+only, never document text.

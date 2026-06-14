@@ -75,6 +75,15 @@ class Settings(BaseModel):
     #: Optional explicit opt-in for the network update check. Default off.
     allow_update_check: bool = False
 
+    # --- Phase 4 hardening ---
+    #: Pages whose mean OCR confidence falls below this are warned about.
+    ocr_min_confidence: float = 0.55
+    #: When a scanned page reads poorly, re-render + re-OCR at this higher DPI.
+    auto_retry_low_confidence: bool = True
+    ocr_retry_dpi: int = 450
+    #: Enabling debug logging risks document text in logs — off by default, warned.
+    debug_logging: bool = False
+
     def save(self, path: Optional[Path] = None) -> None:
         path = path or settings_path()
         path.parent.mkdir(parents=True, exist_ok=True)

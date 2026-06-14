@@ -25,6 +25,15 @@ def enforce_offline() -> None:
 def main(argv: list[str] | None = None) -> int:
     enforce_offline()
 
+    # Configure status-only logging (never document text) before work starts.
+    try:
+        from app.config.logging_setup import configure_logging
+        from app.config.settings import Settings
+
+        configure_logging(debug=Settings.load().debug_logging)
+    except Exception:  # pragma: no cover - logging must never block startup
+        pass
+
     # Import lazily so `app.main.enforce_offline` and the CLI smoke-test work
     # even in environments without PySide6 installed (e.g. headless CI).
     try:
