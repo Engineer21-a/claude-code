@@ -1,0 +1,50 @@
+name: pdeforge CI
+
+# Verification & quality gates for the pdeforge project. Scoped to pdeforge/**
+# so it never interferes with the rest of the repository.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "pdeforge/**"
+      - ".github/workflows/pdeforge-ci.yml"
+  pull_request:
+    paths:
+      - "pdeforge/**"
+      - ".github/workflows/pdeforge-ci.yml"
+
+defaults:
+  run:
+    working-directory: pdeforge
+
+jobs:
+  verify:
+    name: lint, type-check, test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install pdeforge (with dev extras)
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type-check (mypy)
+        run: mypy src/pdeforge
+
+      - name: Run the self-validating test-suite (pytest)
+        run: pytest -q
+
+      - name: Headline demo — the tool must catch the injected bug
+        run: python examples/bug_injection_demo.py

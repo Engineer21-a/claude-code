@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Numba compilation cache
+__pycache__/
+*.nbc
+*.nbi
+
+# Generated reports (the committed example lives in docs/sample_report.md)
+reports/
