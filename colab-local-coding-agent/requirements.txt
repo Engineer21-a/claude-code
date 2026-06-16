@@ -1,0 +1,12 @@
+# Local AI Coding Loop — Colab (A100/H100) dependencies
+#
+# vLLM serves the HuggingFace coding model with an OpenAI-compatible API; the
+# OpenHands agent drives the coding loop against it. Versions are pinned with
+# lower bounds known to support FP8 + Hermes/Mistral tool-call parsing and the
+# OpenHands Local Runtime. Bump as newer releases land.
+
+vllm>=0.8.0                 # OpenAI server, FP8, prefix caching, tool-call parsers
+openhands-ai>=0.40.0        # agentic coding framework (Local Runtime = no Docker)
+huggingface_hub>=0.27.0     # optional weight pre-download / auth
+nest_asyncio>=1.6.0         # lets vLLM/OpenHands event loops run inside Colab
+httpx>=0.27.0               # health-check / API calls

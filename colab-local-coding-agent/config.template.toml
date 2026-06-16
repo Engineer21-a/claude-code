@@ -1,0 +1,29 @@
+# OpenHands config template for the Local AI Coding Loop.
+#
+# The notebook sets the same values via environment variables (see
+# helpers.configure_openhands), so this file is optional — keep it as a
+# reference, or pass it with `--config-file config.toml` to the headless run.
+#
+# Replace the {{PLACEHOLDERS}} if you use it directly.
+
+[core]
+# Local Runtime executes actions directly on this machine (no Docker).
+# Required on Colab, which has no Docker daemon.
+runtime = "local"
+# Host path mounted as the agent's /workspace. The agent reads/writes here.
+workspace_base = "/content/workspace"
+max_iterations = 50
+
+[llm]
+# `openai/` prefix => LiteLLM treats this as an OpenAI-compatible endpoint.
+model = "openai/{{MODEL}}"            # e.g. openai/Qwen/Qwen3.6-35B-A3B
+base_url = "http://localhost:8000/v1"  # the local vLLM server
+api_key = "local-key"                  # must match vLLM --api-key
+temperature = 0.0                      # deterministic for coding
+# Native tool/function calling (vLLM --enable-auto-tool-choice). Set false only
+# if you serve a model without a tool-call parser.
+native_tool_calling = true
+
+[agent]
+# CodeActAgent is OpenHands' default tool-using coding agent.
+agent = "CodeActAgent"
