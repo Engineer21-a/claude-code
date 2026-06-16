@@ -1,6 +1,7 @@
-# Runtime + dev dependencies, pinned to the versions this project was verified
-# against. `pip install -e .[dev]` is the preferred install; this file exists for
-# reproducible CI / fresh environments.
+# Runtime + dev dependencies, pinned to the exact versions this project was
+# verified against. CI installs via `pip install -e ".[dev]"` (resolving the
+# ranges in pyproject.toml); this lockfile is a convenience for reproducing the
+# verified environment in a fresh checkout: `pip install -r requirements.txt`.
 numpy==2.4.6
 scipy==1.17.1
 sympy==1.14.0

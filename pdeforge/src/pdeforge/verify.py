@@ -111,11 +111,21 @@ def grid_convergence_index(hs, phis, fs: float = 1.25) -> GCIResult:
     """
     h1, h2, h3 = (float(v) for v in hs)
     phi1, phi2, phi3 = (float(v) for v in phis)
-    r21 = h2 / h1
-    r32 = h3 / h2
+    if not (h1 < h2 < h3):
+        raise ValueError(
+            "grid sizes must be strictly increasing from fine to coarse "
+            f"(h1 < h2 < h3); got {h1!r}, {h2!r}, {h3!r}."
+        )
     eps21 = phi2 - phi1
     eps32 = phi3 - phi2
-    s = float(np.sign(eps32 / eps21)) if eps21 != 0 else 1.0
+    if eps21 == 0.0 or eps32 == 0.0:
+        raise ValueError(
+            "successive solution values must differ; a zero difference makes the "
+            "apparent order undefined (division by zero / log of zero)."
+        )
+    r21 = h2 / h1
+    r32 = h3 / h2
+    s = float(np.sign(eps32 / eps21))
 
     # Fixed-point iteration for the apparent order p (Celik eq. with q(p)).
     p = 2.0

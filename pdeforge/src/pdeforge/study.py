@@ -84,6 +84,12 @@ def _solution_functional(result: SolveResult) -> float:
 
 def _restrict(result: SolveResult, target_n: int) -> np.ndarray:
     """Subsample a (nested-grid) field down to ``target_n`` points per axis."""
+    if (result.n - 1) % (target_n - 1) != 0:
+        raise ValueError(
+            f"non-nested grids: cannot co-locate a {result.n}-point grid onto a "
+            f"{target_n}-point grid. Use nested resolutions where (n_fine - 1) is a "
+            "multiple of (n_coarse - 1), e.g. 17, 33, 65, 129."
+        )
     stride = (result.n - 1) // (target_n - 1)
     field_nd = result.u_numeric.reshape(result.shape)
     if len(result.shape) == 1:
@@ -94,11 +100,20 @@ def _restrict(result: SolveResult, target_n: int) -> np.ndarray:
 def _cell_order_field(results: list[SolveResult]) -> np.ndarray:
     """Per-cell observed order from the three finest (nested) solutions."""
     fine, med, coarse = results[-1], results[-2], results[-3]
+    # The per-cell order formula assumes a constant refinement ratio; derive it
+    # from the actual grid spacings rather than hard-coding 2.
+    r_fine = med.h / fine.h
+    r_coarse = coarse.h / med.h
+    if not np.isclose(r_fine, r_coarse, rtol=1e-3):
+        raise ValueError(
+            "the per-cell order field requires a constant refinement ratio among "
+            f"the three finest grids; got {r_fine:.4g} and {r_coarse:.4g}."
+        )
     target_n = coarse.n
     pf = _restrict(fine, target_n)
     pm = _restrict(med, target_n)
     pc = coarse.u_numeric.reshape(coarse.shape)
-    return backend.cellwise_order(pf, pm, pc, r=2.0)
+    return backend.cellwise_order(pf, pm, pc, r=r_fine)
 
 
 def run_convergence_study(
@@ -112,6 +127,11 @@ def run_convergence_study(
     if resolutions is None:
         resolutions = DEFAULT_RESOLUTIONS_1D if problem.dim == 1 else DEFAULT_RESOLUTIONS_2D
     resolutions = tuple(sorted(resolutions))  # ascending n => descending h
+    if len(resolutions) < 3:
+        raise ValueError(
+            "a convergence study needs at least 3 grid resolutions (the GCI and "
+            f"per-cell order field each require three grids); got {len(resolutions)}."
+        )
 
     results = [solve(problem, n, **solve_kwargs) for n in resolutions]
     hs = [r.h for r in results]

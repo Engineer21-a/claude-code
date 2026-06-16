@@ -18,7 +18,10 @@ try:  # pragma: no cover - exercised implicitly by whichever path is installed
     BACKEND = "numba"
     weighted_lp_norm = _numba_kernels.weighted_lp_norm
     cellwise_order = _numba_kernels.cellwise_order
-except Exception:  # pragma: no cover - only when numba is missing/broken
+except ImportError:  # pragma: no cover - only when numba is unavailable
+    # Restrict to ImportError so a genuine bug inside kernels.py (e.g. a typo or
+    # a Numba compilation error) fails loudly instead of silently degrading to
+    # the NumPy backend and skipping the parity tests.
     HAS_NUMBA = False
     BACKEND = "numpy"
     weighted_lp_norm = kernels_numpy.weighted_lp_norm
